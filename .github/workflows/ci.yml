@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# GitHub-hosted runners only: this repository is public, so a pull request
+# from anyone runs here (docs/adr/002).
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.28.0
+      GITLEAKS_SHA256: a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb
+      GOLANGCI_LINT_VERSION: 2.15.0
+      GOLANGCI_LINT_SHA256: 9b7fe6a6bf6334b98decf8d86b11415ea7889afdabdd1959fdce23af2a9ebcea
+      GOVULNCHECK_VERSION: 1.9.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Install gitleaks
+        working-directory: ${{ runner.temp }}
+        run: |
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Install golangci-lint
+        working-directory: ${{ runner.temp }}
+        run: |
+          name="golangci-lint-${GOLANGCI_LINT_VERSION}-linux-amd64"
+          curl -sSfL -o "${name}.tar.gz" \
+            "https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/${name}.tar.gz"
+          echo "${GOLANGCI_LINT_SHA256}  ${name}.tar.gz" | sha256sum -c -
+          tar -xzf "${name}.tar.gz" --strip-components=1 "${name}/golangci-lint"
+      - name: Install govulncheck
+        run: GOBIN="$RUNNER_TEMP" go install "golang.org/x/vuln/cmd/govulncheck@v${GOVULNCHECK_VERSION}"
+      - name: Gate
+        run: scripts/gate.sh

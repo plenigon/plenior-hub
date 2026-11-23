@@ -1,0 +1,39 @@
+name: Item check
+
+# Plenigon Communities dispatches this workflow on main for each check of
+# an item version, and trusts the OIDC token of its runs only (docs/adr/002).
+on:
+  workflow_dispatch:
+    inputs:
+      check_id:
+        description: The id of the check, which Communities gives.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: item-check-${{ inputs.check_id }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Build
+        run: go build -trimpath -o "$RUNNER_TEMP/item-check" ./cmd/item-check
+      - name: Check
+        env:
+          CHECK_ID: ${{ inputs.check_id }}
+          COMMUNITIES_URL: ${{ vars.COMMUNITIES_URL }}
+        run: '"$RUNNER_TEMP/item-check"'
