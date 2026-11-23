@@ -126,7 +126,7 @@ func TestARunClaimsChecksAndReports(t *testing.T) {
 	pkg := zipped(t)
 	s := &service{pkg: pkg, listed: pkg}
 	env, client := start(t, s)
-	if err := run(t.Context(), env, client, passing); err != nil {
+	if err := run(t.Context(), env, client, passing, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if reported(s.reported) != "package=passed plenior-check=passed" || s.reported[1].Message != "checked @ana/mural" {
@@ -134,11 +134,28 @@ func TestARunClaimsChecksAndReports(t *testing.T) {
 	}
 }
 
+// The log of a public repository's run is public, so it names each check
+// and its result only: messages may name a private item and go to the
+// service alone.
+func TestTheLogShowsOnlyResults(t *testing.T) {
+	t.Parallel()
+	pkg := zipped(t)
+	s := &service{pkg: pkg, listed: pkg}
+	env, client := start(t, s)
+	var out bytes.Buffer
+	if err := run(t.Context(), env, client, passing, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := out.String(), "package: passed\nplenior-check: passed\n"; got != want {
+		t.Errorf("log = %q, want %q", got, want)
+	}
+}
+
 func TestAnotherPackageIsReportedAsFailed(t *testing.T) {
 	t.Parallel()
 	s := &service{pkg: zipped(t), listed: []byte("what the version listed")}
 	env, client := start(t, s)
-	if err := run(t.Context(), env, client, passing); err != nil {
+	if err := run(t.Context(), env, client, passing, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if reported(s.reported) != "package=failed plenior-check=failed" {
@@ -154,7 +171,7 @@ func TestFailuresThatMayPassLaterAreNotReported(t *testing.T) {
 		"an expired link":  {bucket: http.StatusForbidden, pkg: []byte("x"), listed: []byte("x")},
 	} {
 		env, client := start(t, s)
-		err := run(t.Context(), env, client, passing)
+		err := run(t.Context(), env, client, passing, io.Discard)
 		if err == nil || s.reported != nil || strings.Contains(err.Error(), "id-token") {
 			t.Errorf("%s: run = %v, reported %+v; want an error and no report", name, err, s.reported)
 		}
@@ -177,7 +194,7 @@ func TestRunRefusesABadEnvironment(t *testing.T) {
 			}
 			return env(k)
 		}
-		if err := run(t.Context(), lookup, client, passing); err == nil {
+		if err := run(t.Context(), lookup, client, passing, io.Discard); err == nil {
 			t.Errorf("%s: run succeeded", name)
 		}
 	}

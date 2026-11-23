@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -51,14 +52,16 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if err := run(ctx, os.Getenv, &http.Client{Timeout: requestTimeout}, formats); err != nil {
+	if err := run(ctx, os.Getenv, &http.Client{Timeout: requestTimeout}, formats, os.Stdout); err != nil {
 		logger.Error("item check failed", "error", err)
 		os.Exit(1)
 	}
 }
 
-// run runs the check its environment names, reading it with getenv.
-func run(ctx context.Context, getenv func(string) string, client *http.Client, reg check.Registry) error {
+// run runs the check its environment names, reading it with getenv, and
+// writes each check's name and result to out. The run's log is public, so
+// messages, which may name a private item, go to the service only.
+func run(ctx context.Context, getenv func(string) string, client *http.Client, reg check.Registry, out io.Writer) error {
 	id, base := getenv("CHECK_ID"), getenv("COMMUNITIES_URL")
 	u, err := url.Parse(base)
 	switch {
@@ -85,7 +88,9 @@ func run(ctx context.Context, getenv func(string) string, client *http.Client, r
 		return fmt.Errorf("report the results: %w", err)
 	}
 	for _, r := range results {
-		fmt.Printf("%s: %s %s\n", r.Name, r.Status, r.Message)
+		if _, err := fmt.Fprintf(out, "%s: %s\n", r.Name, r.Status); err != nil {
+			return err
+		}
 	}
 	return nil
 }

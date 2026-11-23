@@ -13,5 +13,6 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
   Plenigon Communities claims a check of an item version with the run's
   OIDC token, downloads the package, proves its size and SHA-256, reads it
   as its media type, runs the check its format names, and reports every
-  result.
+  result. The run's log, public with the repository, names each check and
+  its result only; messages go to the service alone.
 - Gate, CI on GitHub-hosted runners, and the repository's ADRs.
